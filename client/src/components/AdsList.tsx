@@ -1,44 +1,54 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 
-interface Ad {
-  id: string;
-  title: string;
-  description: string;
-  price: number;
-  category: string;
-  status: 'pending' | 'approved' | 'rejected' | 'draft';
-  priority: 'normal' | 'urgent';
-  images: string[];
-  createdAt: string;
-  seller: {
-    id: string;
-    name: string;
-    rating: number;
-    adsCount: number;
-    registrationDate: string;
+import type { Ad, AdsResponse, Filters } from '../types';
+import AdCard from './AdCard';
+
+const CATEGORIES = {
+  "Транспорт": 2,
+  "Мода": 6,
+  "Услуги": 4,
+  "Недвижимость": 1,
+  "Животные": 5,
+  "Детское": 7,
+  "Электроника": 0,
+  "Работа": 3
+};
+
+
+
+const buildQueryParams = (
+  page: number, 
+  sortBy: 'createdAt' | 'price' | 'priority',
+  sortOrder: 'asc' | 'desc',
+  filters: Filters
+) => {
+  const params: Record<string, string | number | string[]> = {
+    page,
+    limit: 10,
+    sortBy,
+    sortOrder,
   };
-  moderationHistory: Array<{
-    id: string;
-    moderatorName: string;
-    action: string;
-    comment?: string;
-    timestamp: string;
-  }>;
-}
 
-interface Pagination {
- currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  itemsPerPage: number;
-}
+  if (filters.status.length > 0) {
+    params.status = filters.status;
+  }
+  if (filters.category) {
+    params.categoryId = CATEGORIES[filters.category as keyof typeof CATEGORIES];
+  }
+  if (filters.minPrice) {
+    params.minPrice = Number(filters.minPrice);
+  }
+  if (filters.maxPrice) {
+    params.maxPrice = Number(filters.maxPrice);
+  }
+  if (filters.search) {
+    params.search = filters.search;
+  }
 
-interface AdsResponse {
-  ads: Ad[];
-  pagination: Pagination;
-}
+  return params;
+};
 
 const AdsList: React.FC = () => {
   const [ads, setAds] = useState<Ad[]>([]);
@@ -50,71 +60,265 @@ const AdsList: React.FC = () => {
     itemsPerPage: 10
   });
 
+  const [filters, setFilters] = useState<Filters>({
+    status: [],
+    category: '',
+    minPrice: '',
+    maxPrice: '',
+    search: ''
+  });
+
+  const [sortBy, setSortBy] = useState<'createdAt' | 'price' | 'priority'>('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const fetchAdsWithFilters = async (page: number = 1, currentFilters: Filters = filters) => {
+    try {
+      setLoading(true);
+      
+      const params = buildQueryParams(page, sortBy, sortOrder, currentFilters);
+      
+      const response = await axios.get<AdsResponse>('/api/v1/ads', { params });
+      setAds(response.data.ads || []);
+      setPagination(response.data.pagination);
+    } catch (error) {
+      console.error('Error fetching ads:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchAds = async () => {
-      try {
-        const response = await axios.get<AdsResponse>('/api/v1/ads', {
-          params: {
-            page: 1,
-            limit: 10,
-            
-          }
-        });
-        setAds(response.data.ads || []);
-        setPagination(response.data.pagination);
-      } catch (error) {
-        console.error('Error fetching ads:', error);
-      } finally {
-        setLoading(false);
-      }
+    fetchAdsWithFilters(1);
+  }, [sortBy, sortOrder]);
+
+  const applyFilters = () => {
+    setShowFilters(false);
+    fetchAdsWithFilters(1);
+  };
+
+  const resetFilters = () => {
+    const newFilters = {
+      status: [],
+      category: '',
+      minPrice: '',
+      maxPrice: '',
+      search: ''
     };
 
-    fetchAds();
-  }, []);
+    setFilters(newFilters);
+    setShowFilters(false);
+    fetchAdsWithFilters(1, newFilters);
+  };
 
-  if (loading) return <div>Loading...</div>;
+  const handleNextPage = () => {
+    if (pagination.currentPage < pagination.totalPages) {
+      fetchAdsWithFilters(pagination.currentPage + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (pagination.currentPage > 1) {
+      fetchAdsWithFilters(pagination.currentPage - 1);
+    }
+  };
+
+  const handleStatusChange = (status: string) => {
+    setFilters(prev => ({
+      ...prev,
+      status: prev.status.includes(status)
+        ? prev.status.filter(s => s !== status)
+        : [...prev.status, status]
+    }));
+  };
+
+  const handleFilterChange = (key: keyof Filters, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  if (loading) return <div>Загрузка...</div>;
 
   return (
-    <div className='flex flex-col px-[30px] py-[50px] gap-[25px]'>
-      <h1 className=''>Список</h1>
+    <div className='flex flex-col px-[30px] py-[50px] gap-[25px] items-center'>
+      <h1 className=''>Список объявлений</h1>
+
+      <div className="w-full max-w-4xl space-y-4">
+        <div className="flex gap-4 items-center">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              placeholder="Поиск по названию или описанию..."
+              value={filters.search}
+              onKeyPress={(e) => e.key === 'Enter' && applyFilters()}
+              onChange={(e) => handleFilterChange('search', e.target.value)}
+              className="w-full px-4 py-2 border rounded-[10px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={applyFilters}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-blue-500 transition-colors border-none"
+            >
+              <Search size={18} />
+            </button>
+          </div>
+          
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-2 px-4 py-2 border rounded-[10px] hover:bg-gray-50 transition-colors"
+          >
+            Фильтры
+          </button>
+          
+          <button
+            onClick={applyFilters}
+            className="px-4 py-2 bg-blue-500 text-white rounded-[10px] hover:bg-blue-600 transition-colors"
+          >
+            Применить
+          </button>
+          
+          <button
+            onClick={resetFilters}
+            className="flex items-center gap-2 px-4 py-2 border rounded-[10px] hover:bg-gray-50 transition-colors"
+          >
+            <X size={18} />
+            Сбросить
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 border rounded-[15px] bg-gray-50">
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Статус</label>
+              <div className="space-y-2">
+                {['pending', 'approved', 'rejected', 'draft'].map(status => (
+                  <label key={status} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={filters.status.includes(status)}
+                      onChange={() => handleStatusChange(status)}
+                      className="rounded"
+                    />
+                    <span className="text-sm">
+                      {status === 'pending' && 'На модерации'}
+                      {status === 'approved' && 'Одобрено'}
+                      {status === 'rejected' && 'Отклонено'}
+                      {status === 'draft' && 'Черновик'}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Категория</label>
+              <select
+                value={filters.category}
+                onChange={(e) => handleFilterChange('category', e.target.value)}
+                className="w-full p-2 border rounded-[10px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Все категории</option>
+                {Object.keys(CATEGORIES).map(category => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Цена</label>
+              <div className="space-y-2">
+                <input
+                  type="number"
+                  placeholder="Мин. цена"
+                  value={filters.minPrice}
+                  onChange={(e) => handleFilterChange('minPrice', e.target.value)}
+                  className="w-full p-2 border rounded-[10px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="number"
+                  placeholder="Макс. цена"
+                  value={filters.maxPrice}
+                  onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
+                  className="w-full p-2 border rounded-[10px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Сортировка</label>
+              <div className="space-y-2">
+                <select
+                  value={sortBy}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === 'createdAt' || value === 'price' || value === 'priority') {
+                      setSortBy(value);
+                    }
+                  }}
+                  className="w-full p-2 border rounded-[10px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="createdAt">По дате</option>
+                  <option value="price">По цене</option>
+                  <option value="priority">По приоритету</option>
+                </select>
+                
+                <select
+                  value={sortOrder}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === 'asc' || value === 'desc') {
+                      setSortOrder(value);
+                    }
+                  }}
+                  className="w-full p-2 border rounded-[10px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="desc">По убыванию</option>
+                  <option value="asc">По возрастанию</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-wrap gap-[20px] justify-center">
         {ads.map(ad => (
-          <div key={ad.id} className="flex p-[20px] border w-full max-w-[80%] rounded-[15px] justify-between items-center">
-            <div className='flex gap-[15px]'>
-                <img 
-                    src={ad.images[0]} 
-                    alt={ad.title}
-                    className="rounded-[15px]"
-                    onError={(e) => {
-                        e.currentTarget.src = 'https://picsum.photos/300/200?grayscale';
-                    }}
-                />
-                <div className='grid gap-[20px]'>
-                    <h3>{ad.title}</h3>
-                    <p>{ad.price} ₽</p>
-                    <div className='flex gap-[20px]'>
-                        <p>{ad.category}</p>
-                        <p>{new Date(ad.createdAt).toLocaleDateString()}</p>
-                    </div>
-                </div>
-
-            </div>
-            
-            <button className='flex items-center gap-[10px] bg-[#10b981]'>
-                Открыть
-                <ArrowRight size={18} />
-            </button>
-            
-          </div>
+          <AdCard 
+            key={ad.id} 
+            {...ad}
+          />
         ))}
       </div>
-      <div className="flex justify-between items-center ">
-        
+      <div className="flex items-center gap-4">
+          <button
+            onClick={handlePrevPage}
+            disabled={pagination.currentPage === 1}
+            className={`flex items-center gap-2 px-4 py-2 rounded-[10px] border transition-colors ${
+              pagination.currentPage === 1
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'
+            }`}
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <span className="text-sm text-gray-600">
+            Страница {pagination.currentPage} из {pagination.totalPages}
+          </span>
+
+          <button
+            onClick={handleNextPage}
+            disabled={pagination.currentPage === pagination.totalPages}
+            className={`flex items-center gap-2 px-4 py-2 rounded-[10px] border transition-colors ${
+              pagination.currentPage === pagination.totalPages
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'
+            }`}
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
         <p className="">
           Всего: {pagination.totalItems} объявлений
         </p>
-        
-      </div>
     </div>
   );
 };
