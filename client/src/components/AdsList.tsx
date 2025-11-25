@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 
@@ -25,7 +25,7 @@ const AdsList: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   
 
-  const fetchAdsWithFilters = async (page: number = 1, currentFilters: Filters = filters) => {
+  const fetchAdsWithFilters = useCallback(async (page: number = 1, currentFilters: Filters = filters) => {
     try {
       setLoading(true);
       
@@ -40,11 +40,11 @@ const AdsList: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sortBy, sortOrder, filters, setCurrentPage]);
 
   useEffect(() => {
     fetchAdsWithFilters(currentPage);
-  }, [sortBy, sortOrder]);
+  }, [fetchAdsWithFilters, currentPage]);
 
   const applyFilters = () => {
     setShowFilters(false);
