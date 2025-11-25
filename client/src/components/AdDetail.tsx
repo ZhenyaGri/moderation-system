@@ -10,16 +10,11 @@ import {
   User,
   Clock,
 } from 'lucide-react';
-import type { Ad } from '../types';
-
-const REASON_TEMPLATES = [
-  'Запрещённый товар',
-  'Неверная категория',
-  'Некорректное описание',
-  'Проблемы с фото',
-  'Подозрение на мошенничество',
-  'Другое'
-];
+import type { Ad, AdsResponse } from '../types';
+import { useListState } from '../hooks/useListState';
+import { useFilters } from '../hooks/useFilters';
+import { REASON_TEMPLATES } from '../constants';
+import { buildNavigationParams } from '../utils/queryParams';
 
 const AdDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,12 +25,28 @@ const AdDetail: React.FC = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [customReason, setCustomReason] = useState('');
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
+  const [customReturnReason, setCustomReturnReason] = useState('');
+  const [returnComment, setReturnComment] = useState('');
+  const { sortBy, sortOrder } = useListState();
+  const [filters] = useFilters();
+  const [adsList, setAdsList] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(-1);
 
   useEffect(() => {
     const fetchAd = async () => {
       try {
         const response = await axios.get(`/api/v1/ads/${id}`);
         setAd(response.data);
+
+        const params = buildNavigationParams(sortBy, sortOrder, filters);
+        const listResponse = await axios.get<AdsResponse>('/api/v1/ads', { params });
+        
+        const adsIds = listResponse.data.ads.map((ad: Ad) => ad.id.toString());
+        setAdsList(adsIds);
+        const index = adsIds.indexOf(id!);
+        setCurrentIndex(index);
       } catch (error) {
         console.error('Error fetching ad:', error);
       } finally {
@@ -44,7 +55,7 @@ const AdDetail: React.FC = () => {
     };
 
     fetchAd();
-  }, [id]);
+  }, [id, sortBy, sortOrder, filters]);
 
   const handleApprove = async () => {
     try {
@@ -53,6 +64,20 @@ const AdDetail: React.FC = () => {
       setAd(response.data);
     } catch (error) {
       console.error('Error approving ad:', error);
+    }
+  };
+
+  const handleNextAd = () => {
+    if (currentIndex < adsList.length - 1) {
+      const nextId = adsList[currentIndex + 1];
+      navigate(`/item/${nextId}`);
+    }
+  };
+
+  const handlePrevAd = () => {
+    if (currentIndex > 0) {
+      const prevId = adsList[currentIndex - 1];
+      navigate(`/item/${prevId}`);
     }
   };
 
@@ -74,12 +99,24 @@ const AdDetail: React.FC = () => {
   };
 
   const handleReturnForRevision = async () => {
+    if (!returnReason) return;
+    
     try {
-      await axios.post(`/api/v1/ads/${id}/return`);
+      const reason = returnReason === 'Другое' ? customReturnReason : returnReason;
+      await axios.post(`/api/v1/ads/${id}/request-changes`, { 
+        reason: reason,
+        comment: returnComment
+      });
+      
+      setShowReturnModal(false);
+      setReturnReason('');
+      setCustomReturnReason('');
+      setReturnComment('');
+
       const response = await axios.get(`/api/v1/ads/${id}`);
       setAd(response.data);
     } catch (error) {
-      console.error('Error returning ad:', error);
+      console.error('Error returning ad for revision:', error);
     }
   };
 
@@ -136,15 +173,15 @@ const AdDetail: React.FC = () => {
             className="flex items-center gap-2 text-blue-600 hover:text-blue-800 transition-colors"
           >
             <ArrowLeft size={20} />
-            Назад к списку
+            К списку
           </button>
           
           <div className="flex items-center gap-4">
-            <button className="flex items-center gap-2 px-4 py-2 border rounded-[10px] hover:bg-gray-50 transition-colors">
+            <button onClick={() => handlePrevAd()} className="flex items-center gap-2 px-4 py-2 border rounded-[10px] hover:bg-gray-50 transition-colors">
               <ArrowLeft size={18} />
               Предыдущее
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 border rounded-[10px] hover:bg-gray-50 transition-colors">
+            <button onClick={() => handleNextAd()} className="flex items-center gap-2 px-4 py-2 border rounded-[10px] hover:bg-gray-50 transition-colors">
               Следующее
               <ArrowRight size={18} />
             </button>
@@ -154,7 +191,6 @@ const AdDetail: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-[15px] p-6 shadow-sm">
-              <h2 className="text-xl font-semibold mb-4">Галерея изображений</h2>
               <div className="space-y-4">
                 <div className="rounded-[15px] overflow-hidden">
                   <img
@@ -310,35 +346,31 @@ const AdDetail: React.FC = () => {
             
           </div>
         </div>
-        {ad.status === 'pending' && (
-            <div className="bg-white rounded-[15px] p-6 shadow-sm">
-                <div className="flex gap-[15px]">
-                    <button
-                        onClick={handleApprove}
-                        className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-[10px] transition-colors font-semibold"
-                    >
-                    <CheckCircle size={20} />
-                        Одобрить
-                    </button>
-                    
-                    <button
-                        onClick={() => setShowRejectModal(true)}
-                        className="w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-[10px] transition-colors font-semibold"
-                    >
-                        <XCircle size={20} />
-                        Отклонить
-                    </button>
-                    
-                    <button
-                        onClick={handleReturnForRevision}
-                        className="w-full flex items-center justify-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white py-3 px-4 rounded-[10px] transition-colors font-semibold"
-                    >
-                        <Edit3 size={20} />
-                        Вернуть на доработку
-                    </button>
-                </div>
-            </div>
-        )}
+        <div className="bg-white rounded-[15px] p-6 shadow-sm">
+          <div className="flex gap-[15px]">
+            <button
+              onClick={handleApprove}
+              className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-[10px] transition-colors font-semibold"
+            >
+              <CheckCircle size={20} />
+              Одобрить
+            </button>
+            <button
+              onClick={() => setShowRejectModal(true)}
+              className="w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-[10px] transition-colors font-semibold"
+            >
+              <XCircle size={20} />
+              Отклонить
+            </button>
+            <button
+              onClick={() => setShowReturnModal(true)}
+              className="w-full flex items-center justify-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white py-3 px-4 rounded-[10px] transition-colors font-semibold"
+            >
+              <Edit3 size={20} />
+              Вернуть на доработку
+            </button>
+          </div>
+        </div>
       </div>
 
       {showRejectModal && (
@@ -389,6 +421,71 @@ const AdDetail: React.FC = () => {
                 className="flex-1 py-2 px-4 bg-red-500 text-white rounded-[10px] hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Отклонить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReturnModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-[15px] p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Укажите причину возврата на доработку</h3>
+            
+            <div className="space-y-3 mb-4">
+              {REASON_TEMPLATES.map((reason) => (
+                <label key={reason} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="returnReason"
+                    value={reason}
+                    checked={returnReason === reason}
+                    onChange={(e) => setReturnReason(e.target.value)}
+                    className="text-yellow-500"
+                  />
+                  <span>{reason}</span>
+                </label>
+              ))}
+            </div>
+
+            {returnReason === 'Другое' && (
+              <textarea
+                value={customReturnReason}
+                onChange={(e) => setCustomReturnReason(e.target.value)}
+                placeholder="Укажите причину..."
+                className="w-full p-3 border rounded-[10px] focus:outline-none focus:ring-2 focus:ring-yellow-500 resize-none mb-3"
+                rows={3}
+              />
+            )}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Дополнительный комментарий:</label>
+              <textarea
+                value={returnComment}
+                onChange={(e) => setReturnComment(e.target.value)}
+                placeholder="Введите комментарий..."
+                className="w-full p-3 border rounded-[10px] focus:outline-none focus:ring-2 focus:ring-yellow-500 resize-none"
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowReturnModal(false);
+                  setReturnReason('');
+                  setCustomReturnReason('');
+                  setReturnComment('');
+                }}
+                className="flex-1 py-2 px-4 border border-gray-300 rounded-[10px] hover:bg-gray-50 transition-colors"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleReturnForRevision}
+                disabled={!returnReason || (returnReason === 'Другое' && !customReturnReason)}
+                className="flex-1 py-2 px-4 bg-yellow-500 text-white rounded-[10px] hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Вернуть
               </button>
             </div>
           </div>

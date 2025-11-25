@@ -4,51 +4,10 @@ import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 
 import type { Ad, AdsResponse, Filters } from '../types';
 import AdCard from './AdCard';
-
-const CATEGORIES = {
-  "Транспорт": 2,
-  "Мода": 6,
-  "Услуги": 4,
-  "Недвижимость": 1,
-  "Животные": 5,
-  "Детское": 7,
-  "Электроника": 0,
-  "Работа": 3
-};
-
-
-
-const buildQueryParams = (
-  page: number, 
-  sortBy: 'createdAt' | 'price' | 'priority',
-  sortOrder: 'asc' | 'desc',
-  filters: Filters
-) => {
-  const params: Record<string, string | number | string[]> = {
-    page,
-    limit: 10,
-    sortBy,
-    sortOrder,
-  };
-
-  if (filters.status.length > 0) {
-    params.status = filters.status;
-  }
-  if (filters.category) {
-    params.categoryId = CATEGORIES[filters.category as keyof typeof CATEGORIES];
-  }
-  if (filters.minPrice) {
-    params.minPrice = Number(filters.minPrice);
-  }
-  if (filters.maxPrice) {
-    params.maxPrice = Number(filters.maxPrice);
-  }
-  if (filters.search) {
-    params.search = filters.search;
-  }
-
-  return params;
-};
+import { useFilters } from '../hooks/useFilters';
+import { useListState } from '../hooks/useListState';
+import { CATEGORIES } from '../constants';
+import { buildQueryParams } from '../utils/queryParams';
 
 const AdsList: React.FC = () => {
   const [ads, setAds] = useState<Ad[]>([]);
@@ -60,17 +19,11 @@ const AdsList: React.FC = () => {
     itemsPerPage: 10
   });
 
-  const [filters, setFilters] = useState<Filters>({
-    status: [],
-    category: '',
-    minPrice: '',
-    maxPrice: '',
-    search: ''
-  });
+  const [filters, setFilters] = useFilters();
+  const { sortBy, setSortBy, sortOrder, setSortOrder, currentPage, setCurrentPage } = useListState();
 
-  const [sortBy, setSortBy] = useState<'createdAt' | 'price' | 'priority'>('createdAt');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
+  
 
   const fetchAdsWithFilters = async (page: number = 1, currentFilters: Filters = filters) => {
     try {
@@ -81,6 +34,7 @@ const AdsList: React.FC = () => {
       const response = await axios.get<AdsResponse>('/api/v1/ads', { params });
       setAds(response.data.ads || []);
       setPagination(response.data.pagination);
+      setCurrentPage(page);
     } catch (error) {
       console.error('Error fetching ads:', error);
     } finally {
@@ -89,11 +43,12 @@ const AdsList: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchAdsWithFilters(1);
+    fetchAdsWithFilters(currentPage);
   }, [sortBy, sortOrder]);
 
   const applyFilters = () => {
     setShowFilters(false);
+    setCurrentPage(1);
     fetchAdsWithFilters(1);
   };
 

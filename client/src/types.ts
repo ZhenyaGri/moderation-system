@@ -45,3 +45,14 @@ export type Filters = {
   maxPrice: string;
   search: string;
 }
+
+export type ApiParams = {
+  limit: number;
+  sortBy: string;
+  sortOrder: string;
+  status?: string[];
+  categoryId?: number;
+  minPrice?: number;
+  maxPrice?: number;
+  search?: string;
+}
