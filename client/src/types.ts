@@ -56,3 +56,31 @@ export type ApiParams = {
   maxPrice?: number;
   search?: string;
 }
+
+export type StatsSummary = {
+  totalReviewed: number;
+  totalReviewedToday: number;
+  totalReviewedThisWeek: number;
+  totalReviewedThisMonth: number;
+  approvedPercentage: number;
+  rejectedPercentage: number;
+  requestChangesPercentage: number;
+  averageReviewTime: number;
+};
+
+export type ActivityData = {
+  date: string;
+  approved: number;
+  rejected: number;
+  requestChanges: number;
+};
+
+export type DecisionsData = {
+  approved: number;
+  rejected: number;
+  requestChanges: number;
+};
+
+export type CategoryData = {
+  [category: string]: number;
+};

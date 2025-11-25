@@ -135,7 +135,7 @@ const AdDetail: React.FC = () => {
       case 'rejected': return 'Отклонено';
       case 'pending': return 'На модерации';
       case 'draft': return 'Черновик';
-      default: return status;
+      default: return "Черновик";
     }
   };
 

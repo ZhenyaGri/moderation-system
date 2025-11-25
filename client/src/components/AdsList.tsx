@@ -91,7 +91,13 @@ const AdsList: React.FC = () => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  if (loading) return <div>Загрузка...</div>;
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-lg">Загрузка списка...</div>
+      </div>
+    );
+  }
 
   return (
     <div className='flex flex-col px-[30px] py-[50px] gap-[25px] items-center'>
